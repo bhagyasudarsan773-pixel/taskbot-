@@ -44,7 +44,7 @@ Quote of the Day:
     print(summary)
     
     # Save the summary to a file so it can be downloaded via GitHub Actions
-    with open("summary.txt", "w", encoding="utf-8") as f:
+    with open("daily_summary.txt", "w", encoding="utf-8") as f:
         f.write(summary)
     
     print("Summary saved to summary.txt")
