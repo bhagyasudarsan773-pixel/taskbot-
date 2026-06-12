@@ -1,53 +1,90 @@
+import os
 import requests
-from datetime import datetime
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import date
 
-def get_weather(location="Thiruvananthapuram"):
+# Load Secrets
+EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
+EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER")
+
+def get_weather(city="Thiruvananthapuram"):
+    url = f"https://wttr.in/{city}?format=3"
     try:
-        # format=3 provides a short format with weather condition and temperature
-        url = f"https://wttr.in/{location}?format=3"
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.text.strip()
-    except requests.exceptions.RequestException as e:
-        return f"Could not fetch weather: {e}"
+    except Exception as e:
+        return f"Weather unavailable ({e})"
 
 def get_quote():
+    url = "https://zenquotes.io/api/random"
     try:
-        url = "https://zenquotes.io/api/random"
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        quote = data[0]['q']
-        author = data[0]['a']
-        return f"\"{quote}\" - {author}"
-    except requests.exceptions.RequestException as e:
-        return f"Could not fetch quote: {e}"
+        quote = data[0]["q"]
+        author = data[0]["a"]
+        return f'"{quote}" - {author}'
+    except Exception as e:
+        return f"Quote unavailable ({e})"
 
-def main():
-    date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    weather = get_weather("Thiruvananthapuram") # Defaulting to London as a generic example
+def build_summary():
+    today = date.today().strftime("%A, %d %B %Y")
+    weather = get_weather()
     quote = get_quote()
 
     summary = f"""
 ======================================
-         DAILY PULSE SUMMARY
+  PULSE - Daily Summary
+  {today}
 ======================================
-Date/Time : {date_str}
 
-Weather   : {weather}
+WEATHER
+  {weather}
 
-Quote of the Day:
-{quote}
+TODAY'S QUOTE
+  {quote}
+
 ======================================
 """
-    
+    return summary
+
+def send_email(summary_text):
+    if not EMAIL_SENDER:
+        print("Missing Email Secrets!")
+        return
+
+    msg = MIMEMultipart()
+    msg['From'] = EMAIL_SENDER
+    msg['To'] = EMAIL_RECEIVER
+    msg['Subject'] = "⚡ Your Daily Pulse Summary"
+
+    # Attach the summary text to the email body
+    msg.attach(MIMEText(summary_text, 'plain'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER.split(","), msg.as_string())
+        server.quit()
+        print("Summary Email sent successfully!")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+def run():
+    summary = build_summary()
     print(summary)
     
-    # Save the summary to a file so it can be downloaded via GitHub Actions
+    # 1. Save it to a file (uploaded as a downloadable artifact)
     with open("daily_summary.txt", "w", encoding="utf-8") as f:
         f.write(summary)
-    
-    print("Summary saved to summary.txt")
+        
+    # 2. Send it to your inbox!
+    send_email(summary)
 
 if __name__ == "__main__":
-    main()
+    run()
